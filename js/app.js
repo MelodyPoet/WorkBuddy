@@ -6,6 +6,73 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
+// ===== 推送模式切换 =====
+function handlePushModeChange() {
+  const mode = document.getElementById('push-mode').value;
+  const timeGroup = document.getElementById('push-time-group');
+  const intervalGroup = document.getElementById('urge-interval-group');
+  const repeatGroup = document.getElementById('push-repeat-group');
+  const templateGroup = document.getElementById('msg-template-group');
+  
+  if (mode === 'urge') {
+    // 催工模式：显示间隔设置，隐藏时间和重复设置
+    timeGroup.style.display = 'none';
+    intervalGroup.style.display = 'block';
+    repeatGroup.style.display = 'none';
+    templateGroup.style.display = 'none';
+    
+    // 更新催工间隔显示
+    updateUrgeIntervalDisplay();
+  } else {
+    // 其他模式：显示时间和重复设置，隐藏间隔设置
+    timeGroup.style.display = 'block';
+    intervalGroup.style.display = 'none';
+    repeatGroup.style.display = 'block';
+    templateGroup.style.display = 'block';
+  }
+}
+
+// 更新催工间隔显示
+function updateUrgeIntervalDisplay() {
+  const intervalInput = document.getElementById('urge-interval');
+  if (!intervalInput) return;
+  
+  const intervalValue = parseInt(intervalInput.value) || 30;
+  const intervalDisplay = document.getElementById('urge-interval-display');
+  const intervalTag = document.getElementById('urge-interval-tag');
+  
+  if (intervalDisplay) {
+    intervalDisplay.textContent = `每${intervalValue}秒`;
+  }
+  if (intervalTag) {
+    intervalTag.textContent = `每${intervalValue}秒推送`;
+  }
+}
+
+// 页面加载时初始化推送模式
+document.addEventListener('DOMContentLoaded', function() {
+  const pushModeSelect = document.getElementById('push-mode');
+  const urgeIntervalInput = document.getElementById('urge-interval');
+  
+  if (pushModeSelect) {
+    pushModeSelect.addEventListener('change', handlePushModeChange);
+    handlePushModeChange(); // 初始调用以设置正确状态
+  }
+  
+  // 为催工间隔输入框添加实时更新事件
+  if (urgeIntervalInput) {
+    urgeIntervalInput.addEventListener('input', function() {
+      if (document.getElementById('push-mode').value === 'urge') {
+        updateUrgeIntervalDisplay();
+      }
+    });
+    // 初始化显示
+    if (document.getElementById('push-mode').value === 'urge') {
+      updateUrgeIntervalDisplay();
+    }
+  }
+});
+
 // ===== Tab 切换 =====
 function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -50,28 +117,45 @@ let pushInterval = null;
 function startPush() {
   const mode = document.getElementById('push-mode').value;
   const title = document.getElementById('task-title').value || 'Q1医院销售计划';
-  addLog(`开始${mode==='now'?'立即':'定时'}推送任务：${title}`, 'green');
-  showToast('推送启动，正在分发至选定部门员工', 'success', '📤');
+  
+  if (mode === 'urge') {
+    // 催工模式：启动自动催工
+    if (isUrgeRunning) {
+      showToast('自动催工已在运行中', 'warning', '⏰');
+      return;
+    }
+    
+    addLog(`🚀 启动自动催工任务（可配置间隔）`, 'orange');
+    showToast('自动催工任务已启动配置', 'success', '🔔');
+    
+    // 启动催工
+    startAutoUrge();
+    
+  } else {
+    // 原有推送模式
+    addLog(`开始${mode==='now'?'立即':'定时'}推送任务：${title}`, 'green');
+    showToast('推送启动，正在分发至选定部门员工', 'success', '📤');
 
-  const employees = [
-    {name:'张伟', dept:'销售部'},
-    {name:'李娜', dept:'销售部'},
-    {name:'王芳', dept:'销售部'},
-    {name:'陈志远', dept:'销售部'},
-  ];
-  let i = 0;
-  const t = setInterval(() => {
-    if (i >= employees.length) { clearInterval(t); addLog('全员推送完成 ✓', 'green'); return; }
-    const e = employees[i++];
-    addLog(`✅ 已推送给 ${e.name}（${e.dept}）`, 'blue');
-    showToast(`任务已推送至 ${e.name}`, 'info', '📨');
-  }, 800);
+    const employees = [
+      {name:'张伟', dept:'销售部'},
+      {name:'李娜', dept:'销售部'},
+      {name:'王芳', dept:'销售部'},
+      {name:'陈志远', dept:'销售部'},
+    ];
+    let i = 0;
+    const t = setInterval(() => {
+      if (i >= employees.length) { clearInterval(t); addLog('全员推送完成 ✓', 'green'); return; }
+      const e = employees[i++];
+      addLog(`✅ 已推送给 ${e.name}（${e.dept}）`, 'blue');
+      showToast(`任务已推送至 ${e.name}`, 'info', '📨');
+    }, 800);
 
-  // 更新统计计数
-  setTimeout(() => animateNum('stat-sent', 0, 4), 200);
-  setTimeout(() => animateNum('stat-replied', 0, 3), 2500);
-  setTimeout(() => animateNum('stat-inprogress', 0, 3), 3500);
-  setTimeout(() => { animateNum('stat-completed', 0, 12); document.getElementById('reply-rate').textContent = '75'; }, 4000);
+    // 更新统计计数
+    setTimeout(() => animateNum('stat-sent', 0, 4), 200);
+    setTimeout(() => animateNum('stat-replied', 0, 3), 2500);
+    setTimeout(() => animateNum('stat-inprogress', 0, 3), 3500);
+    setTimeout(() => { animateNum('stat-completed', 0, 12); document.getElementById('reply-rate').textContent = '75'; }, 4000);
+  }
 }
 
 function addLog(msg, color='green') {
@@ -96,10 +180,17 @@ function animateNum(id, from, to) {
 }
 
 // ===== 聊天数据 =====
+// 智能体独立配置（机器人头像）
+const agentConfig = {
+  avatarBg: '#07C160',
+  avatarText: '🤖',
+  name: '智能体员工'
+};
+
 const chatData = {
   agent: {
     name: '智能体员工', sub: '自动化任务助手 · 在线',
-    avatarBg: '#07C160', avatarText: '🤖',
+    avatarBg: agentConfig.avatarBg, avatarText: agentConfig.avatarText,
     messages: [
       { from: 'bot', time: '09:00', type: 'card', card: {
         title: '📋 任务分配通知',
@@ -188,8 +279,12 @@ function renderMessages(name) {
     if (m.type === 'card') {
       const row = document.createElement('div');
       row.className = 'msg-row';
+      // 卡片消息：智能体发的卡片使用智能体头像
+      const isBotCard = m.from === 'bot';
+      const cardAvatarBg = isBotCard ? agentConfig.avatarBg : data.avatarBg;
+      const cardAvatarTxt = isBotCard ? agentConfig.avatarText : data.avatarText;
       row.innerHTML = `
-        <div class="msg-avatar" style="background:${data.avatarBg}">${data.avatarText}</div>
+        <div class="msg-avatar" style="background:${cardAvatarBg}">${cardAvatarTxt}</div>
         <div>
           <div class="msg-bubble" style="background:#fff;border-radius:0 10px 10px 10px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
             <div class="msg-card">
@@ -203,10 +298,12 @@ function renderMessages(name) {
       container.appendChild(row);
     } else {
       const isMe = m.from === 'me';
+      const isBot = m.from === 'bot';
       const row = document.createElement('div');
       row.className = 'msg-row' + (isMe ? ' me' : '');
-      const avatarBg = isMe ? '#07C160' : data.avatarBg;
-      const avatarTxt = isMe ? '我' : data.avatarText;
+      // 智能体消息使用智能体头像，用户消息使用会话头像，"我"的消息使用固定头像
+      const avatarBg = isMe ? '#07C160' : (isBot ? agentConfig.avatarBg : data.avatarBg);
+      const avatarTxt = isMe ? '我' : (isBot ? agentConfig.avatarText : data.avatarText);
       row.innerHTML = `
         <div class="msg-avatar" style="background:${avatarBg}">${avatarTxt}</div>
         <div>
@@ -801,14 +898,15 @@ function generateSmartReply(text, chatKey) {
 }
 
 // ===================================================
-// ⏰ 30秒自动催工任务系统
+// ⏰ 自动催工任务系统（可配置时间间隔）
 // ===================================================
 
 let autoUrgeTimer = null;       // 主定时器
 let urgeCountdownTimer = null;  // 倒计时显示器
-let urgeSecondsLeft = 30;
+let urgeSecondsLeft = 30;       // 倒计时秒数（初始值）
 let isUrgeRunning = false;
 let urgeRound = 0;              // 第几轮催工
+let urgeIntervalSeconds = 30;   // 催工间隔秒数（可配置）
 
 // 各员工的催工消息池（轮换发送，避免重复）
 const urgeMessages = [
@@ -862,17 +960,34 @@ function toggleAutoUrge() {
 }
 
 function startAutoUrge() {
+  // 获取配置的催工间隔
+  const intervalInput = document.getElementById('urge-interval');
+  if (intervalInput) {
+    urgeIntervalSeconds = parseInt(intervalInput.value) || 30;
+  }
+  
   isUrgeRunning = true;
-  urgeSecondsLeft = 30;
+  urgeSecondsLeft = urgeIntervalSeconds;
+  
   document.getElementById('urge-status-tag').className = 'tag tag-green';
   document.getElementById('urge-status-tag').textContent = '运行中';
   document.getElementById('urge-toggle-btn').textContent = '⏹ 停止催工';
   document.getElementById('urge-toggle-btn').className = 'btn btn-sm btn-outline';
   document.getElementById('auto-urge-row').style.background = '#f0fdf6';
   document.getElementById('auto-urge-row').style.borderColor = 'var(--wx-green)';
+  
+  // 更新定时任务列表中的显示
+  const intervalDisplay = document.getElementById('urge-interval-display');
+  const intervalTag = document.getElementById('urge-interval-tag');
+  if (intervalDisplay) {
+    intervalDisplay.textContent = `每${urgeIntervalSeconds}秒`;
+  }
+  if (intervalTag) {
+    intervalTag.textContent = `每${urgeIntervalSeconds}秒推送`;
+  }
 
-  showToast('🔔 自动催工任务已启动！每30秒向员工询问进度', 'success', '⏰');
-  addLog('⏰ 自动催工任务已启动（间隔30秒）', 'green');
+  showToast(`🔔 自动催工任务已启动！每${urgeIntervalSeconds}秒向员工询问进度`, 'success', '⏰');
+  addLog(`⏰ 自动催工任务已启动（间隔${urgeIntervalSeconds}秒）`, 'green');
 
   // 立刻执行第一次催工
   runUrgeRound();
@@ -882,14 +997,14 @@ function startAutoUrge() {
     urgeSecondsLeft--;
     const cdEl = document.getElementById('urge-countdown');
     if (cdEl) cdEl.textContent = `倒计时：${urgeSecondsLeft}秒`;
-    if (urgeSecondsLeft <= 0) urgeSecondsLeft = 30;
+    if (urgeSecondsLeft <= 0) urgeSecondsLeft = urgeIntervalSeconds;
   }, 1000);
 
-  // 每30秒触发一次催工
+  // 按配置间隔触发催工
   autoUrgeTimer = setInterval(() => {
-    urgeSecondsLeft = 30;
+    urgeSecondsLeft = urgeIntervalSeconds;
     runUrgeRound();
-  }, 30000);
+  }, urgeIntervalSeconds * 1000);
 }
 
 function stopAutoUrge() {
@@ -952,52 +1067,11 @@ function runUrgeRound() {
     }, idx * 600); // 每隔600ms错峰发送
   });
 
-  // 模拟员工在5-15秒后自动回复（增加真实感）
-  const empReplies = {
-    zhang: [
-      '收到！华东区进度65%，本周计划再拜访3家医院。',
-      '明白，我这边在跟进中，预计今天下午有新进展。',
-      '好的，进展顺利！已约好两家医院明天演示，信心十足！',
-    ],
-    li: [
-      '收到，我在整理定制方案，进度40%，周三前提交。',
-      '正在处理，遇到一些客户疑问，需要一些产品对比资料。',
-      '好的，今天跟进了两家医院，其中一家表示有意向！',
-    ],
-    wang: [
-      '收到...最近压力挺大的，政府采购那边还没有进展。',
-      '好的，我在努力开拓私立医院渠道，但进度慢，有些担心完不成。',
-      '收到催工！私立医院这边有了一个新意向，稍后详细汇报。',
-    ],
-    chen: [
-      '报告！西南区一切顺利，拜访计划已就绪，下周全面启动！',
-      '好的，进度85%，成都三甲医院合同谈判中，预计本周签约！',
-      '稳稳的！西南区已完成8成，剩余的两家客户本周内搞定 💪',
-    ],
-  };
-
-  empKeys.forEach((key, idx) => {
-    const delay = 5000 + idx * 2000 + Math.random() * 5000; // 5-15秒随机延迟
-    setTimeout(() => {
-      if (!isUrgeRunning && urgeRound === 0) return; // 已停止则不回复
-      const replyPool = empReplies[key];
-      const replyText = replyPool[Math.floor(Math.random() * replyPool.length)];
-      const t = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'});
-      chatData[key].messages.push({ from: 'me', time: t, text: replyText });
-      if (currentChat === key) renderMessages(key);
-      recordMsg('me', key);
-
-      // 员工回复后，智能体给出情绪感知回复
-      setTimeout(() => {
-        const smartReply = generateSmartReply(replyText, key);
-        const t2 = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'});
-        chatData[key].messages.push({ from: 'bot', time: t2, text: smartReply });
-        if (currentChat === key) renderMessages(key);
-        recordMsg('bot', key);
-        showToast(`${empShortName[key]} 已回复催工消息`, 'success', '💬');
-      }, 1200);
-    }, delay);
-  });
+  // 注意：不再模拟员工自动回复
+  // 所有人类员工角色只能由用户手动输入文字发消息
+  // 智能体根据人类员工的消息语句来做出响应
+  
+  showToast(`第${urgeRound}轮催工消息已发送至所有员工会话`, 'info', '🔔');
 }
 
 
@@ -1126,8 +1200,9 @@ function showTypingBubble(chatKey) {
   const row = document.createElement('div');
   row.className = 'msg-row';
   row.id = 'typing-indicator';
+  // 打字动画总是智能体在输入，使用智能体头像
   row.innerHTML = `
-    <div class="msg-avatar" style="background:${data.avatarBg}">${data.avatarText}</div>
+    <div class="msg-avatar" style="background:${agentConfig.avatarBg}">${agentConfig.avatarText}</div>
     <div><div class="msg-bubble" style="background:#fff;border-radius:0 10px 10px 10px;box-shadow:0 1px 4px rgba(0,0,0,.08)">
       <span style="display:inline-flex;gap:4px;align-items:center;height:18px">
         <span style="width:7px;height:7px;border-radius:50%;background:#bbb;animation:tdot 1.2s infinite 0s"></span>
